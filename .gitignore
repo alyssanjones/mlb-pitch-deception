@@ -1,0 +1,24 @@
+# RStudio files
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+
+# Environment variables and secrets
+.Renviron
+.env
+
+# Large datasets
+*.csv
+*.parquet
+*.rds
+
+# Data folders
+data/raw/
+data/processed/
+
+# Temporary files
+*.tmp
+*.log
+.DS_Store
+Thumbs.db
