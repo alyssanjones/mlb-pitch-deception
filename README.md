@@ -27,27 +27,40 @@ The initial seven-day May request returned exactly 25,000 pitches; downloading i
 
 All three models were fitted using April data and evaluated on the same **27,640 May pitches**. The GAM's performance on April 26–30 was similar (74.4% accuracy; Brier 0.173; log loss 0.518). The low ECE of the constant model does not imply good pitch-by-pitch discrimination. These results establish performance of a **retrospective forecasting benchmark**, not what a hitter could actually see or predict.
 
+### Handedness-aware model validation (May 8–14)
+
+After observing poorer baseline GAM performance on left-handed pitchers, I tested separate left-/right-handed GAMs and models that mirror horizontal decision-point coordinates for left-handed pitchers. All models were trained on April data. I compared the specifications on May 1–7, then evaluated them without refitting on May 8–14 (27,706 usable pitches).
+
+| Model | Accuracy ↑ | Brier ↓ | Log loss ↓ |
+|---|---:|---:|---:|
+| Original combined GAM | 75.1% | 0.170 | 0.513 |
+| Separate LHP/RHP GAMs | **76.4%** | **0.162** | **0.492** |
+| Mirrored X with original handedness | 76.4% | 0.162 | 0.493 |
+| Mirrored X with relative handedness | 76.4% | 0.162 | 0.493 |
+
+The separate models performed better on both throwing-hand groups, with larger improvements for left-handed pitchers. This supports using handedness-aware models as retrospective benchmarks; it does not establish batter-perceived deception. May 8–14 is an additional chronological validation period rather than a guarantee of season-long generalization.
+
 ## Methodology
 
 ### 1. Reconstruct the flight
 
 The initial pitch-flight approximation uses the fitted Statcast velocity and acceleration components:
 
-\[
+$$
 \begin{aligned}
-x(t) &= x_0 + v_{x0}t + \tfrac12 a_x t^2,\\
-y(t) &= 50 + v_{y0}t + \tfrac12 a_y t^2,\\
-z(t) &= z_0 + v_{z0}t + \tfrac12 a_z t^2.
+x(t) &= x_0 + v_{x0}t + \frac{1}{2}a_xt^2 \\
+y(t) &= 50 + v_{y0}t + \frac{1}{2}a_yt^2 \\
+z(t) &= z_0 + v_{z0}t + \frac{1}{2}a_zt^2
 \end{aligned}
-\]
+$$
 
 Coordinates are in feet and time is in seconds. Statcast's fitted velocity parameters refer to the approximately 50-foot reference plane; release-position coordinates are aligned to that reference before extrapolation. Plate crossing is evaluated at `y = 1.417` feet under the project's geometric convention.
 
 The baseline **decision time** is 175 milliseconds before plate crossing:
 
-\[
+$$
 t_{\mathrm{decision}} = t_{\mathrm{plate}} - 0.175.
-\]
+$$
 
 Alternative windows of 150 and 200 ms were explored. For the complete April sample, mean absolute error between reconstructed and recorded plate location was about **0.0025 ft** on each axis. This validates numerical consistency with the fitted Statcast trajectory, **not** pre-decision predictive independence. Unusually large reconstruction discrepancies are flagged rather than automatically removed.
 
@@ -81,9 +94,9 @@ An exploratory *confident error* uses `P(strike) >= 0.70` for an actual ball or 
 
 Some pitch types produce higher GAM error rates than others. To avoid treating pitch mix alone as pitcher skill, I explored observed-minus-expected confident-error rates:
 
-\[
+$$
 \mathrm{ExcessErrorPP}_{p}=100\times\frac{\sum_{i\in p}(e_i-\hat q_i)}{N_p},
-\]
+$$
 
 where `e_i` indicates a confident model error and `q̂_i` is an expected error probability. An initial leave-one-pitcher-out comparison conditions on pitch type and final zone status. A later exploratory logistic adjustment was trained on April 26–30 and included grouped pitch type, velocity, measured movement, count, handedness, and actual zone status. On May data, this expected-error model improved Brier score **0.0876 → 0.0856** and log loss **0.319 → 0.309** against a constant error-rate baseline.
 
@@ -97,28 +110,28 @@ This project uses **R and RStudio**. Core packages include `baseballr`, `tidyver
 install.packages(c("baseballr", "tidyverse", "mgcv"))
 ```
 
-Run the scripts from the repository's root working directory. Cached `.rds` Statcast data and trained-model files are required for the analysis scripts; downloaded datasets are **not necessarily included in the repository**.
+Run the scripts from the repository root working directory; source files are stored in `scripts/`. Cached `.rds` Statcast data and trained-model files are required for the analysis scripts; downloaded datasets are **not necessarily included in the repository**.
 
 | Script | Role |
 |---|---|
-| `05_expand_statcast.R` | Download and cache April regular-season Statcast data |
-| `01_data_collection.R` | Load April data; check required variables and complete cases |
-| `02_trajectory_reconstruction.R` | Reconstruct April trajectories and decision points |
-| `03_strike_zone.R` | Create geometric strike-zone outcomes |
-| `04_deception_model.R` | Fit/save the April GAM and evaluate development periods |
-| `07_verify_may_download.R` | Download May 1–7 by day and save the combined verified file |
-| `06_may_validation.R` | Load and check the saved May data |
-| `08_may_evaluation.R` | Apply frozen April models to May and score predictions |
-| `09_pitch_mix_adjustment.R` | Exploratory pitch-type adjustment; later covariate-adjustment work is in progress |
+| `scripts/05_expand_statcast.R` | Download and cache April regular-season Statcast data |
+| `scripts/01_data_collection.R` | Load April data; check required variables and complete cases |
+| `scripts/02_trajectory_reconstruction.R` | Reconstruct April trajectories and decision points |
+| `scripts/03_strike_zone.R` | Create geometric strike-zone outcomes |
+| `scripts/04_deception_model.R` | Fit/save the April GAM and evaluate development periods |
+| `scripts/07_verify_may_download.R` | Download May 1–7 by day and save the combined verified file |
+| `scripts/06_may_validation.R` | Load and check the saved May data |
+| `scripts/08_may_evaluation.R` | Apply frozen April models to May and score predictions |
+| `scripts/09_pitch_mix_adjustment.R` | Exploratory pitch-type adjustment; later covariate-adjustment work is in progress |
 
 **Typical execution order after downloading/caching data:**
 
 ```r
-source("01_data_collection.R")
-source("02_trajectory_reconstruction.R")
-source("03_strike_zone.R")
-source("04_deception_model.R")
-source("08_may_evaluation.R")
+source("scripts/01_data_collection.R")
+source("scripts/02_trajectory_reconstruction.R")
+source("scripts/03_strike_zone.R")
+source("scripts/04_deception_model.R")
+source("scripts/08_may_evaluation.R")
 ```
 
 Before running May evaluation, confirm the following artifacts exist (the baselines were also saved separately during development):
