@@ -3,6 +3,8 @@
 .RData
 .Ruserdata
 .Rproj.user/
+.RDATATMP
+.RDATATMP1
 
 # Environment variables and secrets
 .Renviron

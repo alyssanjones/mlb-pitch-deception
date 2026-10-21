@@ -1,130 +1,154 @@
 # MLB Pitcher Deception
 
-**Can I identify MLB pitchers whose pitches are especially difficult to predict at the batter's swing-decision point?**
+### Can a pitcher's final location be anticipated at the batter's swing-decision point?
 
-This ongoing R research project investigates whether a pitch's eventual location inside or outside the strike zone is predictable before it reaches home plate, and whether some pitchers produce more unexpected outcomes than others. The longer-term goal is to develop and validate a **Decision-Point Deception Score (DPDS)** and test its relationship with chase rate, whiff rate, and pitching performance.
+I am investigating how predictable MLB pitches are shortly before they reach home plate, whether that predictability differs across pitchers, and whether unexpected pitch locations are associated with pitching success.
 
-> **Research status:** Prototype and exploratory analysis. The current trajectory model is **retrospective**: Statcast's fitted trajectory parameters use information from the full pitch flight. Its prediction errors are **not** direct observations of batter perception or validated measurements of deception. A model using genuine time-stamped, pre-decision tracking observations is the next methodological priority.
+I use **2025 MLB Statcast data**, physics-based trajectory reconstruction, and generalized additive models (GAMs) in **R**. My long-term goal is to develop a validated **Decision-Point Deception Score (DPDS)** that distinguishes pitches that appear likely to finish in the zone but miss it (*false strikes*) from pitches that appear likely to miss but finish in the zone (*hidden strikes*).
 
-## Current results
+> **Project status — active research.** The current results measure errors from **retrospective trajectory-based models**, not batter perception. Statcast's published trajectory coefficients are estimated from the complete flight, so reconstructed decision-point locations may encode information not actually available at the decision point. I am treating the current analysis as a modeling benchmark, not a finished deception metric.
 
-I analyzed 2025 regular-season Statcast data obtained through [`baseballr`](https://billpetti.github.io/baseballr/). April was used for model development; May 1–7 was evaluated using the April-trained models.
+## Key results
 
-| Dataset | Raw pitches | Complete trajectory records |
-|---|---:|---:|
-| April 1–30, 2025 | 108,708 | 108,400 |
-| May 1–7, 2025 | 27,706 | 27,640 |
+The clearest finding so far is that **accounting for pitcher handedness improves strike-zone forecasts**. I trained the models on April 2025 data, explored model designs on May 1–7, and then evaluated the frozen candidates on **May 8–14 (27,706 usable pitches)**.
 
-The initial seven-day May request returned exactly 25,000 pitches; downloading individual days recovered another 2,706. The May analysis uses the combined daily downloads, with records deduplicated by game, at-bat, and pitch number. Daily coverage was checked, but completeness was not independently audited against every official game record.
-
-### Out-of-period strike-zone prediction (May 1–7)
-
-| Model | Accuracy ↑ | Brier ↓ | Log loss ↓ | ECE ↓ |
-|---|---:|---:|---:|---:|
-| Constant training strike rate | 50.8% | 0.250 | 0.693 | 0.00799 |
-| Pre-pitch context logistic regression | 56.4% | 0.245 | 0.682 | 0.0168 |
-| Retrospective trajectory GAM | **74.3%** | **0.174** | **0.522** | 0.0186 |
-
-All three models were fitted using April data and evaluated on the same **27,640 May pitches**. The GAM's performance on April 26–30 was similar (74.4% accuracy; Brier 0.173; log loss 0.518). The low ECE of the constant model does not imply good pitch-by-pitch discrimination. These results establish performance of a **retrospective forecasting benchmark**, not what a hitter could actually see or predict.
-
-### Handedness-aware model validation (May 8–14)
-
-After observing poorer baseline GAM performance on left-handed pitchers, I tested separate left-/right-handed GAMs and models that mirror horizontal decision-point coordinates for left-handed pitchers. All models were trained on April data. I compared the specifications on May 1–7, then evaluated them without refitting on May 8–14 (27,706 usable pitches).
-
-| Model | Accuracy ↑ | Brier ↓ | Log loss ↓ |
-|---|---:|---:|---:|
+| Model | Accuracy ↑ | Brier score ↓ | Log loss ↓ |
+|:--|--:|--:|--:|
 | Original combined GAM | 75.1% | 0.170 | 0.513 |
-| Separate LHP/RHP GAMs | **76.4%** | **0.162** | **0.492** |
-| Mirrored X with original handedness | 76.4% | 0.162 | 0.493 |
-| Mirrored X with relative handedness | 76.4% | 0.162 | 0.493 |
+| **Separate LHP / RHP GAMs** | **76.4%** | **0.162** | **0.492** |
+| Mirrored X, original handedness | 76.4% | 0.162 | 0.493 |
+| Mirrored X, relative handedness | 76.4% | 0.162 | 0.493 |
 
-The separate models performed better on both throwing-hand groups, with larger improvements for left-handed pitchers. This supports using handedness-aware models as retrospective benchmarks; it does not establish batter-perceived deception. May 8–14 is an additional chronological validation period rather than a guarantee of season-long generalization.
+The separate-handedness models improved accuracy by **1.3 percentage points** over the original GAM in this follow-up week. The mirrored models performed nearly as well. Differences among the handedness-aware candidates are small and have not been established as statistically significant.
 
-## Methodology
+![Comparison of four GAM specifications across accuracy, Brier score, and log loss](figures/figure_02_model_comparison.png)
 
-### 1. Reconstruct the flight
+*Figure 1. Four April-trained GAM specifications evaluated on the same May 8–14 pitches. Each panel uses its own scale to make small model differences visible; higher accuracy is better, while lower Brier score and log loss are better.*
 
-The initial pitch-flight approximation uses the fitted Statcast velocity and acceleration components:
+### Why handedness matters
 
-$$
-\begin{aligned}
-x(t) &= x_0 + v_{x0}t + \frac{1}{2}a_xt^2 \\
-y(t) &= 50 + v_{y0}t + \frac{1}{2}a_yt^2 \\
-z(t) &= z_0 + v_{z0}t + \frac{1}{2}a_zt^2
-\end{aligned}
-$$
+The original combined GAM performed worse for left-handed pitchers. On May 8–14, the separate GAMs improved the LHP Brier score from **0.179 to 0.162** and the RHP Brier score from **0.167 to 0.162**. This suggests that some of the earlier difference in model errors by throwing hand was due to how the model represented trajectories rather than a demonstrated difference in deception.
 
-Coordinates are in feet and time is in seconds. Statcast's fitted velocity parameters refer to the approximately 50-foot reference plane; release-position coordinates are aligned to that reference before extrapolation. Plate crossing is evaluated at `y = 1.417` feet under the project's geometric convention.
+![Brier score of combined and separate models by pitcher throwing hand](figures/figure_07_handedness_brier.png)
 
-The baseline **decision time** is 175 milliseconds before plate crossing:
+*Figure 2. Model performance by pitcher throwing hand on May 8–14. Lower Brier scores indicate more accurate probabilistic predictions.*
 
-$$
-t_{\mathrm{decision}} = t_{\mathrm{plate}} - 0.175.
-$$
+## How the analysis works
 
-Alternative windows of 150 and 200 ms were explored. For the complete April sample, mean absolute error between reconstructed and recorded plate location was about **0.0025 ft** on each axis. This validates numerical consistency with the fitted Statcast trajectory, **not** pre-decision predictive independence. Unusually large reconstruction discrepancies are flagged rather than automatically removed.
+### 1. Reconstruct pitch flight
+
+I download regular-season pitch-level data using [`baseballr`](https://billpetti.github.io/baseballr/) and use Statcast's fitted velocity and acceleration coefficients to reconstruct each pitch's trajectory. The coordinate calculation follows a constant-acceleration representation:
+
+```text
+x(t) = x0 + vx0*t + 0.5*ax*t²
+z(t) = z0 + vz0*t + 0.5*az*t²
+```
+
+The model aligns release coordinates to the **50-foot reference plane** before calculating the ball's position. I estimate a decision point **175 milliseconds before plate crossing** and have explored 150 ms and 200 ms alternatives. The reconstructed plate positions match Statcast's reported locations very closely (approximately **0.0025 ft mean absolute error per axis**), which checks the reconstruction arithmetic—not the independence of the original tracking data.
+
+![Reconstructed pitch flight with the estimated decision point marked](figures/figure_01_trajectory_example.png)
+
+*Figure 3. Example reconstructed pitch in side view. The colored segments distinguish flight before and after the assumed decision point. This is a reconstruction of a full-flight fit, not a set of independently observed pre-decision positions.*
 
 ### 2. Define the strike-zone outcome
 
-The primary binary target, `strike_overlap`, is a geometric approximation: a baseball modeled as a circle of radius **1.45 inches** overlaps the rectangular zone defined by plate half-width **8.5 inches** and the pitch-specific `sz_bot` / `sz_top`. A stricter ball-center-inside-zone label (`strike_center`) is retained as a sensitivity check.
+I calculate a geometric strike-zone label (`strike_overlap`) using the pitch's recorded plate-crossing coordinates, pitch-specific `sz_top` and `sz_bot`, the plate's **8.5-inch half-width**, and a **1.45-inch ball radius**. A pitch is labeled a strike if any part of the modeled ball overlaps the zone. I retain a stricter ball-center label for sensitivity analyses. These labels describe geometry, not an umpire's call.
 
-In May, **14,047 / 27,640 (50.8%)** pitches were classified as overlap strikes. The two labeling conventions disagreed on **2,478 (9.0%)** pitches. This is a geometric outcome definition, not a model of umpire calls.
+### 3. Predict whether the pitch finishes in the zone
 
-### 3. Predict strike-zone status
+I began with a constant strike-probability model and a logistic regression using pre-pitch context. I then trained a GAM using count, batter and pitcher handedness, and the reconstructed three-dimensional decision-point location.
 
-I compared a constant-probability baseline, pre-pitch logistic regression using count and handedness, and a generalized additive model (GAM) using the same context plus reconstructed decision-point `x`, `y`, and `z` coordinates.
+The GAM uses smooth terms to model nonlinear relationships between position and the probability of a strike. After observing differences by throwing hand, I compared:
 
-The GAM was fitted with `mgcv::gam(..., family = binomial(), method = "REML")`. Smooth-basis dimension `k = 10` was selected using April 21–25 after comparing against `k = 5`; model fitting used April 1–20, and development evaluation used April 26–30. The selected model was then tested on May 1–7 without refitting. Accuracy, Brier score, log loss, and 10-bin expected calibration error (ECE) were reported.
+- A single combined GAM.
+- Separate GAMs for left-handed and right-handed pitchers.
+- A combined GAM with left-handed horizontal decision-point coordinates mirrored into a common orientation, using two handedness representations.
 
-**Critical limitation:** Reconstructed decision-point coordinates use parameters estimated from observations throughout the pitch. Simply truncating points simulated from those parameters would **not** remove future-information leakage.
+I evaluate **classification accuracy**, **Brier score**, **log loss**, and probability calibration, with chronological separation between model training and later evaluation dates.
 
-### 4. Explore directional prediction errors
+![Calibration curve comparing predicted and observed strike probabilities](figures/figure_03_calibration_plot.png)
 
-A model-predicted strike that finishes outside the zone is labeled a **false strike**; a model-predicted ball that finishes inside is a **hidden strike**. Using a 0.50 probability cutoff, the May GAM made:
+*Figure 4. Calibration of the selected available model predictions on the plotted May evaluation period. The dashed diagonal represents perfect calibration.*
 
-| Outcome | Pitches | Share |
-|---|---:|---:|
-| Correct classification | 20,530 | 74.3% |
-| False strike | 4,456 | 16.1% |
-| Hidden strike | 2,654 | 9.6% |
+### 4. Examine unexpected outcomes
 
-An exploratory *confident error* uses `P(strike) >= 0.70` for an actual ball or `P(strike) <= 0.30` for an actual strike. May contained **2,682** such errors. These thresholds are descriptive, not a final deception definition.
+I distinguish two kinds of incorrect strike-zone forecasts:
 
-### 5. Adjust for pitch characteristics
+| Error type | Prediction | Actual location |
+|:--|:--|:--|
+| **False strike** | Inside the zone | Outside the zone |
+| **Hidden strike** | Outside the zone | Inside the zone |
 
-Some pitch types produce higher GAM error rates than others. To avoid treating pitch mix alone as pitcher skill, I explored observed-minus-expected confident-error rates:
+The basic classification uses a **0.50** probability threshold. A more restrictive exploratory analysis counts *confident* false strikes when the model predicts a strike probability of at least **0.70**, and *confident* hidden strikes when it predicts at most **0.30**.
 
-$$
-\mathrm{ExcessErrorPP}_{p}=100\times\frac{\sum_{i\in p}(e_i-\hat q_i)}{N_p},
-$$
+![Breakdown of correct classifications, false strikes, and hidden strikes](figures/figure_04_prediction_breakdown.png)
 
-where `e_i` indicates a confident model error and `q̂_i` is an expected error probability. An initial leave-one-pitcher-out comparison conditions on pitch type and final zone status. A later exploratory logistic adjustment was trained on April 26–30 and included grouped pitch type, velocity, measured movement, count, handedness, and actual zone status. On May data, this expected-error model improved Brier score **0.0876 → 0.0856** and log loss **0.319 → 0.309** against a constant error-rate baseline.
+*Figure 5. Distribution of prediction outcomes. These are model errors and should not be interpreted as directly observed visual deception.*
 
-These are **exploratory retrospective error-adjustment scores**, not a validated DPDS or final pitcher rankings. They use outcome-conditioned and full-flight inputs, and the short May window provides too few appearances for trustworthy ranking uncertainty or repeatability claims. Some later adjustment and game-level diagnostics were performed interactively and may not yet be incorporated in the checked-in scripts.
+The frequency of confident errors also varies by pitch type. To avoid confusing different base rates, I calculate false-strike rates among **actual balls** and hidden-strike rates among **actual strikes**.
 
-## Repository workflow
+![Coxcomb visualization of conditional error rates by pitch type](figures/figure_05_pitch_type_errors.png)
 
-This project uses **R and RStudio**. Core packages include `baseballr`, `tidyverse`, and `mgcv`.
+*Figure 6. Conditional error rates by pitch type, displayed as two coxcomb charts. The wedge areas represent rates rather than pitch counts; only pitch types meeting the script's sample thresholds are included.*
 
-```r
-install.packages(c("baseballr", "tidyverse", "mgcv"))
+### 5. Explore pitcher-level differences
+
+I began an observed-versus-expected adjustment to account for characteristics such as pitch type, velocity, movement, count, and handedness. A positive value means a pitcher produced more confident forecast errors than expected under the adjustment model.
+
+![Exploratory ranking of pitchers by adjusted excess confident-error rates](figures/figure_06_exploratory_pitchers.png)
+
+*Figure 7. Exploratory pitcher rankings from the earlier May 1–7 adjustment analysis. These values use the original combined GAM, have limited game-level samples, and are **not** validated DPDS rankings.*
+
+This is a diagnostic rather than a finished leaderboard: the sample is small, the scores depend on the forecasting model, and uncertainty and repeatability have not yet been established.
+
+## Data and reproducibility
+
+### Data windows
+
+| Period | Purpose | Usable pitches |
+|:--|:--|--:|
+| April 2025 | Model development and April validation | 108,400 complete trajectory records across the month |
+| May 1–7, 2025 | Initial evaluation and handedness-model exploration | 27,640 |
+| May 8–14, 2025 | Frozen-model chronological follow-up | 27,706 |
+
+The April model-fitting, tuning, and development-evaluation dates are separated within the month. See the training scripts for those boundaries. I download May data by individual day to avoid truncated multi-day responses, and I check for duplicate pitch identifiers.
+
+### Repository layout
+
+```text
+MLB-Pitcher-Deception/
+├── README.md
+├── RUN_ORDER.md
+├── CODE_REVIEW.md
+├── .gitignore
+├── scripts/
+│   ├── 01_data_collection.R
+│   ├── 02_trajectory_reconstruction.R
+│   ├── 03_strike_zone.R
+│   ├── 04_deception_model.R
+│   ├── 05_expand_statcast.R
+│   ├── 06_may_validation.R
+│   ├── 07_verify_may_download.R
+│   ├── 08_may_evaluation.R
+│   ├── 09_pitch_mix_adjustment.R
+│   ├── 10_expand_may.R
+│   ├── 11_handedness_models.R
+│   ├── 12_handedness_validation.R
+│   └── 13_generate_figures.R
+├── figures/                 # Committed PNG and PDF figures
+├── data/                    # Local Statcast data; not committed
+└── models/                  # Local trained objects; not committed
 ```
 
-Run the scripts from the repository root working directory; source files are stored in `scripts/`. Cached `.rds` Statcast data and trained-model files are required for the analysis scripts; downloaded datasets are **not necessarily included in the repository**.
+### Run the analysis
 
-| Script | Role |
-|---|---|
-| `scripts/05_expand_statcast.R` | Download and cache April regular-season Statcast data |
-| `scripts/01_data_collection.R` | Load April data; check required variables and complete cases |
-| `scripts/02_trajectory_reconstruction.R` | Reconstruct April trajectories and decision points |
-| `scripts/03_strike_zone.R` | Create geometric strike-zone outcomes |
-| `scripts/04_deception_model.R` | Fit/save the April GAM and evaluate development periods |
-| `scripts/07_verify_may_download.R` | Download May 1–7 by day and save the combined verified file |
-| `scripts/06_may_validation.R` | Load and check the saved May data |
-| `scripts/08_may_evaluation.R` | Apply frozen April models to May and score predictions |
-| `scripts/09_pitch_mix_adjustment.R` | Exploratory pitch-type adjustment; later covariate-adjustment work is in progress |
+I use **R / RStudio** with the packages `baseballr`, `tidyverse`, `mgcv`, and `scales`.
 
-**Typical execution order after downloading/caching data:**
+```r
+install.packages(c("baseballr", "tidyverse", "mgcv", "scales"))
+```
+
+Once the raw data files have been downloaded and verified using the acquisition scripts, run the analysis **from the repository root**, in the order below:
 
 ```r
 source("scripts/01_data_collection.R")
@@ -132,35 +156,26 @@ source("scripts/02_trajectory_reconstruction.R")
 source("scripts/03_strike_zone.R")
 source("scripts/04_deception_model.R")
 source("scripts/08_may_evaluation.R")
+source("scripts/09_pitch_mix_adjustment.R")
+source("scripts/11_handedness_models.R")
+source("scripts/12_handedness_validation.R")
+source("scripts/13_generate_figures.R")
 ```
 
-Before running May evaluation, confirm the following artifacts exist (the baselines were also saved separately during development):
-
-```text
-data/statcast_april_2025.rds
-data/statcast_may_verified_2025.rds
-models/gam_model_k10.rds
-models/baseline_model.rds
-models/constant_strike_rate.rds
-```
-
-If these files are absent, run the acquisition scripts, then regenerate the April model artifacts before May evaluation. The modeling workflow should never train on the May evaluation set. Note that the scripts have been developed incrementally and are **not yet packaged as a one-command, clean-environment reproducibility release**. Paths and file names assume the project root is the working directory.
+For first-time data acquisition, additional setup, and script dependencies, see **[RUN_ORDER.md](RUN_ORDER.md)**. The plotting script generates both PNG and PDF versions. Raw Statcast downloads and trained objects are intentionally excluded from version control; scripts currently exchange some objects through the R session, so follow the documented execution order.
 
 ## Limitations and next steps
 
-The principal unresolved issue is **information availability at the decision point**. Ordinary pitch-level Statcast exports provide fitted flight parameters rather than a time-stamped series of directly observed 3D ball positions. A stronger study needs genuine observations acquired **at or before** the modeled decision point, with defensible timestamps and coordinate calibration.
+**The most important limitation is information leakage from full-flight tracking fits.** Although I calculate positions 175 ms before the plate, the underlying Statcast coefficients were estimated using the full pitch trajectory. This means my current models cannot establish what a batter could have predicted at that instant. Generating synthetic early-flight positions from the same coefficients would not solve this problem.
 
-Priorities:
+Other limitations include the assumed fixed decision time, geometric approximations to the strike zone, uneven pitcher sample sizes, model-specific prediction errors, and exploratory model selection on May 1–7. The May 8–14 check strengthens the handedness-model comparison, but does not settle uncertainty, stability across the season, or causal effects on hitters.
 
-1. Investigate availability of frame-level tracking measurements and their measurement uncertainty; do not represent synthetic points from full-flight fits as leak-free observations.
-2. Fit early-flight-only constant-velocity and constant-acceleration forecasts, then evaluate strike probabilities on later games.
-3. Test decision windows (150, 175, 200 ms), and quantify sensitivity to strike-zone geometry and tracking uncertainty.
-4. Develop separate continuous-probability false-strike and hidden-strike components, controlling for pitch mix and other covariates without erasing the phenomenon of interest.
-5. Collect more appearances; evaluate game-level uncertainty, shrinkage, and season-to-season repeatability before ranking pitchers.
-6. Test incremental associations with chase rate, whiff rate, and established pitching metrics. Avoid causal claims from observational correlations.
+My next priorities are to:
 
-## Interpretation
+1. Find reliable, time-stamped ball-position observations available **only up to the decision point** and validate their spatial accuracy.
+2. Fit early-flight-only trajectory forecasts and compare them with the current retrospective GAM benchmarks.
+3. Test decision-point timing and strike-zone-definition sensitivity.
+4. Estimate pitcher-level uncertainty and repeatability using larger samples and game-aware methods.
+5. Evaluate whether a validated deception metric adds information beyond conventional pitch characteristics when studying chase and whiff outcomes.
 
-**What the current project demonstrates:** a nonlinear model built from retrospectively reconstructed 175-ms pitch coordinates predicts eventual geometric strike-zone status substantially better than pre-pitch context alone on May 2025 data.
-
-**What it does not demonstrate:** that a batter could make the same predictions, that model errors directly measure deception, or that any pitcher has a statistically established deception skill. The DPDS remains a research goal rather than a finalized metric.
+**The central question remains open:** which pitchers make their pitches' final locations hardest to anticipate at the batter's decision point—and does that unpredictability contribute to pitching success?
